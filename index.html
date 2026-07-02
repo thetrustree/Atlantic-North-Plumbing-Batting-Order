@@ -325,6 +325,36 @@
     }
     .toast.show { opacity: 1; transform: translateY(0); }
 
+    .share-modal[hidden] { display: none; }
+    .share-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(3, 19, 31, .72);
+    }
+    .share-card {
+      width: min(560px, 100%);
+      padding: 22px;
+      border: 1px solid #a8c9d9;
+      border-radius: 18px;
+      background: white;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .3);
+    }
+    .share-card h2 { margin: 0; color: var(--navy); }
+    .share-card p { margin: 7px 0 14px; color: var(--muted); }
+    .share-link {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid #9ebdcd;
+      border-radius: 9px;
+      color: var(--navy);
+      background: var(--cream);
+    }
+    .share-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
+
     @media (max-width: 760px) {
       .app { width: min(100% - 18px, 1180px); padding-top: 9px; }
       .hero { align-items: flex-start; flex-direction: column; padding: 21px; border-radius: 18px; }
@@ -384,6 +414,17 @@
       <div class="leaderboard" id="leaderboard"></div>
     </section>
   </main>
+  <div class="share-modal" id="shareModal" hidden>
+    <section class="share-card" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+      <h2 id="shareTitle">Team Link Ready</h2>
+      <p>Copy this link and send it to the team. It carries the complete market setup.</p>
+      <input class="share-link" id="shareLinkField" readonly aria-label="Team Link">
+      <div class="share-actions">
+        <button class="btn small" id="closeShare">Close</button>
+        <button class="btn primary small" id="copyShare">Copy Link</button>
+      </div>
+    </section>
+  </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
@@ -699,26 +740,34 @@
     document.getElementById("copyLink").addEventListener("click", () => {
       const payload = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
       const link = `${location.href.split("#")[0]}#team=${payload}`;
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        notify("Team Link copied.");
-      };
-      const fallback = () => {
-        if (settled) return;
-        try {
-          if (fallbackCopy(link)) finish();
-          else prompt("Copy this Team Link", link);
-        } catch (_) {
-          prompt("Copy this Team Link", link);
+      const field = document.getElementById("shareLinkField");
+      field.value = link;
+      document.getElementById("shareModal").hidden = false;
+      field.focus();
+      field.select();
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(link).catch(() => {});
+    });
+
+    document.getElementById("closeShare").addEventListener("click", () => {
+      document.getElementById("shareModal").hidden = true;
+    });
+
+    document.getElementById("copyShare").addEventListener("click", () => {
+      const field = document.getElementById("shareLinkField");
+      field.focus();
+      field.select();
+      try {
+        if (fallbackCopy(field.value)) {
+          notify("Team Link copied.");
+          return;
         }
-      };
+      } catch (_) {}
       if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(link).then(finish).catch(fallback);
-        setTimeout(fallback, 500);
+        navigator.clipboard.writeText(field.value)
+          .then(() => notify("Team Link copied."))
+          .catch(() => prompt("Copy this Team Link", field.value));
       } else {
-        fallback();
+        prompt("Copy this Team Link", field.value);
       }
     });
 
