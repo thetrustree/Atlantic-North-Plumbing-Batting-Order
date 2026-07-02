@@ -797,7 +797,15 @@
 
       dataRows.forEach(row => {
         const name = String(row[chosenNameIndex] ?? "").trim();
-        if (!name || normalizedHeader(name) === "insert tech name here") return;
+        const normalizedName = normalizedHeader(name);
+        if (
+          !name ||
+          normalizedName === "insert tech name here" ||
+          normalizedName === "weighted scorecard" ||
+          normalizedName === "example technician calculation" ||
+          normalizedName === "compjter" ||
+          normalizedName === normalizedHeader(sheetName)
+        ) return;
         const destination = destinationFrom(roleIndex >= 0 ? row[roleIndex] : "", sheetName);
         const targetTeam = state.teams[destination];
         const existing = targetTeam.technicians.find(tech => tech.name.toLowerCase() === name.toLowerCase());
