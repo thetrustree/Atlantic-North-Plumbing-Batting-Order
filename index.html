@@ -295,6 +295,35 @@
       background: var(--cream);
       font-weight: 800;
     }
+    .input-shell {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid #bccbd3;
+      border-radius: 8px;
+      color: var(--navy);
+      background: var(--cream);
+    }
+    .input-shell:focus-within {
+      border-color: #d79616;
+      box-shadow: 0 0 0 2px rgba(247, 185, 40, .18);
+    }
+    .input-shell .metric-input,
+    .input-shell .setting-input {
+      border: 0;
+      border-radius: 0;
+      outline: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .input-affix {
+      flex: 0 0 auto;
+      padding: 0 0 0 10px;
+      color: var(--muted);
+      font-weight: 900;
+    }
+    .input-affix.suffix { padding: 0 10px 0 0; }
     .metric-score { font-weight: 900; color: var(--green); text-align: right; }
     .tech-tools { display: flex; justify-content: flex-end; gap: 8px; margin-top: 11px; }
 
@@ -476,7 +505,7 @@
             { name: metricNames[1], target: 0.25, weight: 0.20, type: "percent" },
             { name: metricNames[2], target: 300, weight: 0.20, type: "currency" },
             { name: metricNames[3], target: 1, weight: 0.20, type: "number" },
-            { name: metricNames[4], target: 3, weight: 0.20, type: "decimal" }
+            { name: metricNames[4], target: 3, weight: 0.10, type: "decimal" }
           ],
           technicians: [
             ["Brian Galguera", 0, 0, 650, 2, 2.0],
@@ -519,6 +548,15 @@
         data.windowDays = oldDays || 14;
       }
       data.windowDays = Math.max(1, Math.round(Number(data.windowDays) || 14));
+      const maintenanceMetrics = data.teams?.maintenance?.metrics || [];
+      const maintenanceTotal = maintenanceMetrics.reduce((sum, metric) => sum + (Number(metric.weight) || 0), 0);
+      if (
+        maintenanceMetrics.length === 5 &&
+        Math.abs(maintenanceTotal - 1.1) < .0001 &&
+        Math.abs((Number(maintenanceMetrics[4].weight) || 0) - .2) < .0001
+      ) {
+        maintenanceMetrics[4].weight = .1;
+      }
       return data;
     }
 
@@ -548,6 +586,28 @@
       if (type === "percent") return percent(n);
       if (type === "currency") return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
       return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    }
+
+    function editableValue(value, type, forcePercent = false) {
+      const n = Number(value) || 0;
+      if (forcePercent || type === "percent") {
+        return Number((n * 100).toFixed(2)).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      }
+      if (type === "currency") {
+        return Math.round(n).toLocaleString();
+      }
+      return Number(n.toFixed(2)).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+
+    function inputValue(value, type, forcePercent = false) {
+      const number = Number(String(value ?? "").replace(/[$,%\s]/g, "").replaceAll(",", "")) || 0;
+      return Math.max(0, forcePercent || type === "percent" ? number / 100 : number);
+    }
+
+    function inputShell({ value, type, attributes, forcePercent = false }) {
+      const prefix = type === "currency" ? '<span class="input-affix">$</span>' : "";
+      const suffix = forcePercent || type === "percent" ? '<span class="input-affix suffix">%</span>' : "";
+      return `<div class="input-shell">${prefix}<input ${attributes} type="text" inputmode="decimal" value="${escapeAttr(editableValue(value, type, forcePercent))}">${suffix}</div>`;
     }
 
     function sortedTechs() {
@@ -590,8 +650,17 @@
       const rows = team().metrics.map((metric, index) => `
         <div class="settings-grid">
           <input class="setting-input" data-setting="name" data-index="${index}" value="${escapeAttr(metric.name)}" aria-label="Metric ${index + 1} name">
-          <input class="setting-input" data-setting="target" data-index="${index}" type="number" min="0" step="${metric.type === "percent" ? ".01" : ".1"}" value="${metric.target}" aria-label="${escapeAttr(metric.name)} target">
-          <input class="setting-input" data-setting="weight" data-index="${index}" type="number" min="0" step=".01" value="${metric.weight}" aria-label="${escapeAttr(metric.name)} weight">
+          ${inputShell({
+            value: metric.target,
+            type: metric.type,
+            attributes: `class="setting-input" data-setting="target" data-index="${index}" aria-label="${escapeAttr(metric.name)} target"`
+          })}
+          ${inputShell({
+            value: metric.weight,
+            type: "number",
+            forcePercent: true,
+            attributes: `class="setting-input" data-setting="weight" data-index="${index}" aria-label="${escapeAttr(metric.name)} weight"`
+          })}
         </div>`).join("");
       const total = team().metrics.reduce((sum, metric) => sum + (Number(metric.weight) || 0), 0);
       const settings = document.getElementById("settings");
@@ -616,7 +685,11 @@
         const isOpen = openTech === tech.id;
         const metricRows = team().metrics.map((metric, index) => `
           <div>${escapeHtml(metric.name)}</div>
-          <div><input class="metric-input" data-tech="${tech.id}" data-metric="${index}" type="number" min="0" step="${metric.type === "percent" ? ".01" : ".1"}" value="${tech.actuals[index] ?? 0}" aria-label="${escapeAttr(tech.name)} ${escapeAttr(metric.name)} actual"></div>
+          <div>${inputShell({
+            value: tech.actuals[index] ?? 0,
+            type: metric.type,
+            attributes: `class="metric-input" data-tech="${tech.id}" data-metric="${index}" aria-label="${escapeAttr(tech.name)} ${escapeAttr(metric.name)} actual"`
+          })}</div>
           <div class="attain">${percent(tech.result.detail[index].attainment)}</div>
           <div class="metric-score">${percent(tech.result.detail[index].points)}</div>`).join("");
         return `
@@ -703,7 +776,8 @@
       if (!input) return;
       const tech = team().technicians.find(item => item.id === input.dataset.tech);
       if (tech) {
-        tech.actuals[Number(input.dataset.metric)] = Math.max(0, Number(input.value) || 0);
+        const metricIndex = Number(input.dataset.metric);
+        tech.actuals[metricIndex] = inputValue(input.value, team().metrics[metricIndex].type);
         save(); render();
       }
     });
@@ -713,7 +787,8 @@
       if (!input) return;
       const tech = team().technicians.find(item => item.id === input.dataset.tech);
       if (tech) {
-        tech.actuals[Number(input.dataset.metric)] = Math.max(0, Number(input.value) || 0);
+        const metricIndex = Number(input.dataset.metric);
+        tech.actuals[metricIndex] = inputValue(input.value, team().metrics[metricIndex].type);
         save();
       }
     });
@@ -728,16 +803,27 @@
       }
       const metric = team().metrics[Number(input.dataset.index)];
       if (input.dataset.setting === "name") metric.name = input.value.trim() || `Metric ${Number(input.dataset.index) + 1}`;
-      else metric[input.dataset.setting] = Math.max(0, Number(input.value) || 0);
+      else if (input.dataset.setting === "weight") metric.weight = inputValue(input.value, "number", true);
+      else metric.target = inputValue(input.value, metric.type);
       save(); render();
     });
 
     document.getElementById("settings").addEventListener("input", event => {
-      const input = event.target.closest('[data-setting="windowDays"]');
+      const input = event.target.closest("[data-setting]");
       if (!input) return;
-      state.windowDays = Math.max(1, Math.min(365, Math.round(Number(input.value) || 14)));
+      if (input.dataset.setting === "windowDays") {
+        state.windowDays = Math.max(1, Math.min(365, Math.round(Number(input.value) || 14)));
+        save();
+        renderSummary();
+        return;
+      }
+      if (input.dataset.setting === "name") return;
+      const metric = team().metrics[Number(input.dataset.index)];
+      if (input.dataset.setting === "weight") metric.weight = inputValue(input.value, "number", true);
+      else metric.target = inputValue(input.value, metric.type);
       save();
       renderSummary();
+      renderWarning();
     });
 
     document.getElementById("toggleSettings").addEventListener("click", () => {
